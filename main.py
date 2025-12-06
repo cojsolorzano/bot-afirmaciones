@@ -7,9 +7,8 @@ import os
 from flask import Flask
 
 # --- CONFIGURACIÓN ---
-# En Render, configurarás estas variables en la sección "Environment Variables"
 TOKEN = os.environ.get('TELEGRAM_TOKEN') 
-CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID') # Tu ID o el del canal donde enviará el mensaje
+CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID') 
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
@@ -21,10 +20,13 @@ afirmaciones = [
     "Soy suficiente tal y como soy.",
     "Atraigo energía positiva a mi vida.",
     "Mis desafíos me ayudan a crecer.",
-    "Merezco amor, felicidad y prosperidad.",
-    "Confío en mi intuición y sabiduría.",
-    # ¡Agrega todas las que quieras aquí!
 ]
+
+# --- NUEVO: RESPONDER A COMANDOS ---
+# Esto hace que si le escribes /start o /hola, te responda
+@bot.message_handler(commands=['start', 'hola'])
+def send_welcome(message):
+    bot.reply_to(message, "¡Hola! Soy tu bot de afirmaciones. Estoy funcionando correctamente. 🤖")
 
 # --- LÓGICA DEL BOT ---
 def enviar_afirmacion():
@@ -35,12 +37,10 @@ def enviar_afirmacion():
     except Exception as e:
         print(f"Error al enviar: {e}")
 
-# Programar la hora (Formato 24h, hora del servidor - usualmente UTC)
-# Ojo: Render usa hora UTC (Greenwich). Si estás en España son +1/+2 horas, Latam -3/-6 horas.
-# Ajusta la hora según la diferencia. Ejemplo: "13:00" UTC podría ser tu mañana.
+# Programar la hora (Ajusta esto si quieres probar. Ej: si son las 10:00, pon 10:05)
 schedule.every().day.at("13:00").do(enviar_afirmacion)
 
-# --- SERVIDOR WEB (Para mantener vivo a Render) ---
+# --- SERVIDOR WEB ---
 @app.route('/')
 def home():
     return "¡El Bot de Afirmaciones está vivo! 🤖"
@@ -52,11 +52,22 @@ def run_schedule():
 
 # --- INICIO ---
 if __name__ == "__main__":
-    # Hilo para el cronograma (se ejecuta en paralelo)
+    # Hilo para el cronograma
     t = threading.Thread(target=run_schedule)
     t.start()
     
-    # Iniciar servidor web (requerido por Render)
-    # Render asigna un puerto dinámico en la variable PORT
+    # Hilo para escuchar mensajes (Polling)
+    # Esto permite que el bot responda cuando le escribes
+    t_bot = threading.Thread(target=bot.infinity_polling)
+    t_bot.start()
+
+    # ENVIO DE PRUEBA AL INICIAR
+    # Esto enviará un mensaje apenas Render termine de cargar
+    try:
+        bot.send_message(CHAT_ID, "🟢 El sistema se ha reiniciado. ¡Estoy listo!")
+    except:
+        pass
+
+    # Iniciar servidor web
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
